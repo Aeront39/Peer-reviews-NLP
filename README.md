@@ -15,7 +15,7 @@ https://peerlogic.csc.ncsu.edu/volume for all the volume metrics only
 
 https://peerlogic.csc.ncsu.edu/sentiment for all the sentiment metrics only
 
-https://peerlogic.csc.ncsu.edu/emotion for all the emotion metrics only
+https://peerlogic.csc.ncsu.edu/emotions for all the emotion metrics only
 
 https://peerlogic.csc.ncsu.edu/remarks for identifying level of praise and criticism
 
