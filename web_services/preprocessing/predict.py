@@ -5,12 +5,11 @@ from preprocessing.suggestions_and_problem_preprocessing import load_items, pred
 
 import os
 
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "credentials.json"
-
-# Google cloud imports
-from google.cloud import language
-from google.cloud.language import enums
-from google.cloud.language import types
+from textblob import TextBlob
+from nltk.sentiment.vader import SentimentIntensityAnalyzer
+import nltk
+nltk.download('vader_lexicon')
+nltk.download('punkt')  # For sentence tokenization
 
 # Import nltk libraries for volume analysis
 from nltk.tokenize import TreebankWordTokenizer
@@ -25,23 +24,34 @@ stop_words |= {'.', ',', '!', '?'}
 
 # predict sentiment tone and score of the review
 def predictSentiment(review):
-    client = language.LanguageServiceClient()
-    document = types.Document(content=review, type=enums.Document.Type.PLAIN_TEXT)
-    sentiment = client.analyze_sentiment(document=document).document_sentiment
+    blob = TextBlob(review)
+    polarity = blob.sentiment.polarity
+    subjectivity = blob.sentiment.subjectivity
+
+    # Check sentence-level sentiments for Mixed tone
+    positive_sentences = negative_sentences = 0
+    for sentence in blob.sentences:
+        sent_polarity = sentence.sentiment.polarity
+        if sent_polarity > 0.1:
+            positive_sentences += 1
+        elif sent_polarity < -0.1:
+            negative_sentences += 1
+
     predicted_confidence = 0
-    if sentiment.score > 0.25:
-        predicted_confidence = 1
+    sentiment_tone = "Neutral"
+
+    if polarity > 0.25:
         sentiment_tone = "Positive"
-
-    elif sentiment.score < -0.25:
+        predicted_confidence = 1
+    elif polarity < -0.25:
         sentiment_tone = "Negative"
-
     else:
-        if sentiment.magnitude < 0.6:
-            sentiment_tone = "Neutral"
-        else:
+        if positive_sentences > 0 and negative_sentences > 0:
             sentiment_tone = "Mixed"
-    return sentiment_tone, round(sentiment.score, 3), predicted_confidence
+        else:
+            sentiment_tone = "Neutral" if subjectivity < 0.6 else "Mixed"
+
+    return sentiment_tone, round(polarity, 3), predicted_confidence
 
 
 # predict presence and chances of suggestions in the review
@@ -73,29 +83,33 @@ def predictVolume(review):
 
 # predict presence of praise and or criticism in the review
 def predictEmotion(review):
-    client = language.LanguageServiceClient()
-    document = types.Document(content=review, type=enums.Document.Type.PLAIN_TEXT)
-    sentiment = client.analyze_sentiment(document=document).document_sentiment
+    sid = SentimentIntensityAnalyzer()
+    scores = sid.polarity_scores(review)
+    compound = scores['compound']
+    pos = scores['pos']
+    neg = scores['neg']
+    magnitude = pos + neg  # Approximate "magnitude"
+
     praise = criticism = "None"
     predicted_confidence = 0
 
-    if 0.6 <= sentiment.magnitude < 1.5:
-        if sentiment.score > 0.25:
+    # Adjust thresholds based on your use case
+    if 0.3 <= magnitude < 0.6:
+        if compound > 0.1:
             praise = "Low"
-        elif sentiment.score < -0.25:
+        elif compound < -0.1:
             criticism = "Low"
         else:
             praise = criticism = "Low"
-
-    elif sentiment.magnitude >= 1.5:
-        if sentiment.score > 0.25:
-            predicted_confidence = 1
+    elif magnitude >= 0.6:
+        if compound > 0.1:
             praise = "High"
-        elif sentiment.score < -0.25:
+            predicted_confidence = 1
+        elif compound < -0.1:
             criticism = "High"
         else:
-            predicted_confidence = 1
             praise = criticism = "High"
+            predicted_confidence = 1
 
     return praise, criticism, predicted_confidence
 
